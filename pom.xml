@@ -8,7 +8,7 @@
 
     <groupId>dev.swbf2profile</groupId>
     <artifactId>swbfiic-save-editor</artifactId>
-    <version>1.0.0</version>
+    <version>1.2.0</version>
 
     <name>SWBFIIC SaveEditor</name>
     <description>Profile save editor for Star Wars Battlefront II Classic.</description>

@@ -14,71 +14,142 @@ public final class ProfileFileService {
     }
 
     public void save(Path path, BattlefrontProfile profile) throws IOException {
-        createBackupIfMissing(path);
+        createVisibleBackup(path);
         writeSafely(path, profile);
     }
 
     public void saveAs(Path path, BattlefrontProfile profile) throws IOException {
         if (Files.exists(path)) {
-            createBackupIfMissing(path);
+            createVisibleBackup(path);
         }
 
         writeSafely(path, profile);
     }
 
+    public Path saveWithPossibleRename(
+            Path currentPath,
+            BattlefrontProfile profile
+    ) throws IOException {
+        String profileName = profile.getProfileName();
+        validateProfileFileName(profileName);
+
+        Path desiredPath = currentPath.resolveSibling(profileName + ".profile");
+
+        if (sameNormalizedPath(currentPath, desiredPath)) {
+            save(currentPath, profile);
+            return currentPath;
+        }
+
+        if (Files.exists(desiredPath)) {
+            throw new IOException(
+                    "A profile file with this name already exists: "
+                            + desiredPath.getFileName()
+            );
+        }
+
+        Path tempFile = createTempProfileFile(desiredPath, profile);
+        Path rollbackBackup = getRollbackBackupPath(currentPath);
+
+        try {
+            Files.deleteIfExists(rollbackBackup);
+
+            if (Files.exists(currentPath)) {
+                createVisibleBackupForRenamedProfile(currentPath, desiredPath);
+                moveReplacing(currentPath, rollbackBackup);
+            }
+
+            moveReplacing(tempFile, desiredPath);
+
+            Files.deleteIfExists(rollbackBackup);
+            cleanupOldRenameArtifacts(currentPath);
+
+            return desiredPath;
+
+        } catch (IOException exception) {
+            if (Files.exists(rollbackBackup) && !Files.exists(currentPath)) {
+                moveReplacing(rollbackBackup, currentPath);
+            }
+
+            throw exception;
+
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
+    }
+
     public void restoreBackup(Path path) throws IOException {
-        Path backupPath = getBackupPath(path);
+        Path backupPath = getVisibleBackupPath(path);
 
         if (!Files.exists(backupPath)) {
             throw new IOException("Backup file does not exist: " + backupPath);
         }
 
-        byte[] backupData = Files.readAllBytes(backupPath);
-
-        BattlefrontProfile restoredProfile = new BattlefrontProfile(backupData);
-
-        if (Files.exists(path)) {
-            Path beforeRestorePath = path.resolveSibling(
-                    path.getFileName() + ".before-restore"
-            );
-
-            Files.copy(
-                    path,
-                    beforeRestorePath,
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.COPY_ATTRIBUTES
-            );
-        }
+        BattlefrontProfile restoredProfile =
+                new BattlefrontProfile(Files.readAllBytes(backupPath));
 
         writeSafely(path, restoredProfile);
     }
 
     public boolean backupExists(Path path) {
-        return Files.exists(getBackupPath(path));
+        return Files.exists(getVisibleBackupPath(path));
     }
 
-    private void createBackupIfMissing(Path path) throws IOException {
+    private void createVisibleBackup(Path path) throws IOException {
         if (!Files.exists(path)) {
             return;
         }
 
-        Path backupPath = getBackupPath(path);
+        Path backupPath = getVisibleBackupPath(path);
 
-        if (!Files.exists(backupPath)) {
-            Files.copy(
-                    path,
-                    backupPath,
-                    StandardCopyOption.COPY_ATTRIBUTES
-            );
-        }
+        Files.copy(
+                path,
+                backupPath,
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.COPY_ATTRIBUTES
+        );
     }
 
-    private Path getBackupPath(Path path) {
+    private void createVisibleBackupForRenamedProfile(
+            Path oldPath,
+            Path newPath
+    ) throws IOException {
+        if (!Files.exists(oldPath)) {
+            return;
+        }
+
+        Path newBackupPath = getVisibleBackupPath(newPath);
+
+        Files.copy(
+                oldPath,
+                newBackupPath,
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.COPY_ATTRIBUTES
+        );
+    }
+
+    private Path getVisibleBackupPath(Path path) {
         return path.resolveSibling(path.getFileName() + ".bak");
     }
 
+    private Path getRollbackBackupPath(Path path) {
+        return path.resolveSibling("." + path.getFileName() + ".swbfiic-rollback");
+    }
+
     private void writeSafely(Path path, BattlefrontProfile profile) throws IOException {
-        Path absolutePath = path.toAbsolutePath();
+        Path tempFile = createTempProfileFile(path, profile);
+
+        try {
+            moveReplacing(tempFile, path);
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
+    }
+
+    private Path createTempProfileFile(
+            Path targetPath,
+            BattlefrontProfile profile
+    ) throws IOException {
+        Path absolutePath = targetPath.toAbsolutePath();
         Path parent = absolutePath.getParent();
 
         if (parent == null) {
@@ -93,28 +164,54 @@ public final class ProfileFileService {
                 ".tmp"
         );
 
-        try {
-            Files.write(tempFile, profile.toByteArray());
-            replaceFile(tempFile, absolutePath);
-        } finally {
-            Files.deleteIfExists(tempFile);
-        }
+        Files.write(tempFile, profile.toByteArray());
+
+        return tempFile;
     }
 
-    private void replaceFile(Path tempFile, Path targetFile) throws IOException {
+    private void moveReplacing(Path source, Path target) throws IOException {
         try {
             Files.move(
-                    tempFile,
-                    targetFile,
+                    source,
+                    target,
                     StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE
             );
         } catch (AtomicMoveNotSupportedException exception) {
             Files.move(
-                    tempFile,
-                    targetFile,
+                    source,
+                    target,
                     StandardCopyOption.REPLACE_EXISTING
             );
         }
+    }
+
+    private boolean sameNormalizedPath(Path first, Path second) {
+        return first.toAbsolutePath()
+                .normalize()
+                .equals(second.toAbsolutePath().normalize());
+    }
+
+    private void validateProfileFileName(String profileName) {
+        if (profileName.contains("\\")
+                || profileName.contains("/")
+                || profileName.contains(":")
+                || profileName.contains("*")
+                || profileName.contains("?")
+                || profileName.contains("\"")
+                || profileName.contains("<")
+                || profileName.contains(">")
+                || profileName.contains("|")) {
+            throw new IllegalArgumentException(
+                    "Profile name contains characters that cannot be used in a Windows filename."
+            );
+        }
+    }
+
+    private void cleanupOldRenameArtifacts(Path oldPath) throws IOException {
+        Files.deleteIfExists(getVisibleBackupPath(oldPath));
+        Files.deleteIfExists(oldPath.resolveSibling(oldPath.getFileName() + ".before-rename"));
+        Files.deleteIfExists(oldPath.resolveSibling(oldPath.getFileName() + ".before-restore"));
+        Files.deleteIfExists(getRollbackBackupPath(oldPath));
     }
 }

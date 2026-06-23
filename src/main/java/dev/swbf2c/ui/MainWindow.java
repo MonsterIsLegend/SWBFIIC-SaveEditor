@@ -44,6 +44,8 @@ public final class MainWindow extends JFrame {
     private boolean dirty;
     private boolean suppressDirtyEvents;
 
+    private JTextField profileNameField;
+
     private final JTextField[] medalFields =
             new JTextField[ProfileFormat.MEDAL_COUNT];
 
@@ -92,7 +94,7 @@ public final class MainWindow extends JFrame {
             }
         });
 
-        setMinimumSize(new Dimension(780, 480));
+        setMinimumSize(new Dimension(820, 540));
         pack();
         setLocationRelativeTo(null);
     }
@@ -159,6 +161,40 @@ public final class MainWindow extends JFrame {
     }
 
     private JPanel createProfileEditorPanel() {
+        JPanel panel = new JPanel(new BorderLayout(12, 12));
+
+        panel.add(createProfileInfoPanel(), BorderLayout.NORTH);
+        panel.add(createProfileValuesPanel(), BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private JPanel createProfileInfoPanel() {
+        JPanel panel = createCardPanel("Profile");
+
+        profileNameField = new JTextField(22);
+        attachDirtyListener(profileNameField);
+
+        addFieldRow(panel, 0, "Profile Name", profileNameField);
+
+        JLabel note = new JLabel("Maximum profile name length: "
+                + ProfileFormat.PROFILE_NAME_MAX_CHARS
+                + " characters.");
+        note.setFont(note.getFont().deriveFont(12.0f));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 2;
+        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        panel.add(note, gbc);
+
+        return panel;
+    }
+
+    private JPanel createProfileValuesPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -246,10 +282,12 @@ public final class MainWindow extends JFrame {
 
         JLabel noteLabel = new JLabel(
                 "<html>"
-                        + "Rise of the Empire campaign editor. "
-                        + "This changes the current campaign mission stored in the .rote file. "
+                        + "Rise of the Empire mission selector. "
+                        + "Choose the campaign mission that should be loaded from this .rote save file. "
+                        + "A .bak backup is created before saving changes."
                         + "</html>"
         );
+
         noteLabel.setFont(noteLabel.getFont().deriveFont(12.0f));
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
@@ -346,7 +384,7 @@ public final class MainWindow extends JFrame {
         buttonPanel.add(saveAsButton);
         buttonPanel.add(saveButton);
 
-        JLabel hintLabel = new JLabel("A .bak file is created automatically before overwriting an existing profile.");
+        JLabel hintLabel = new JLabel("A .bak file is created before overwriting an existing profile.");
         hintLabel.setFont(hintLabel.getFont().deriveFont(12.0f));
 
         panel.add(hintLabel, BorderLayout.WEST);
@@ -456,7 +494,10 @@ public final class MainWindow extends JFrame {
             switch (currentFileType) {
                 case PROFILE -> {
                     updateProfileFromFields();
-                    profileFileService.save(currentPath, currentProfile);
+                    currentPath = profileFileService.saveWithPossibleRename(
+                            currentPath,
+                            currentProfile
+                    );
                 }
                 case ROTE -> {
                     updateRoteFromFields();
@@ -620,6 +661,8 @@ public final class MainWindow extends JFrame {
         suppressDirtyEvents = true;
 
         try {
+            profileNameField.setText(profile.getProfileName());
+
             for (int i = 0; i < ProfileFormat.MEDAL_COUNT; i++) {
                 medalFields[i].setText(String.valueOf(profile.getMedal(i)));
             }
@@ -652,6 +695,8 @@ public final class MainWindow extends JFrame {
         if (currentProfile == null) {
             throw new IllegalStateException("No profile file is loaded.");
         }
+
+        currentProfile.setProfileName(profileNameField.getText());
 
         for (int i = 0; i < ProfileFormat.MEDAL_COUNT; i++) {
             int value = parseIntField(
@@ -852,6 +897,10 @@ public final class MainWindow extends JFrame {
     }
 
     private void setAllEditorFieldsEnabled(boolean enabled) {
+        if (profileNameField != null) {
+            profileNameField.setEnabled(enabled);
+        }
+
         for (JTextField field : medalFields) {
             if (field != null) {
                 field.setEnabled(enabled);
@@ -877,8 +926,13 @@ public final class MainWindow extends JFrame {
             return;
         }
 
-        String fileName = currentPath.getFileName().toString();
-        String displayName = stripExtension(fileName);
+        String displayName;
+
+        if (currentFileType == SaveFileType.PROFILE && currentProfile != null) {
+            displayName = currentProfile.getProfileName();
+        } else {
+            displayName = stripExtension(currentPath.getFileName().toString());
+        }
 
         currentFileLabel.setText(currentFileType.displayName() + ": " + displayName);
         currentFileLabel.setToolTipText(currentPath.toAbsolutePath().toString());

@@ -14,70 +14,69 @@ public final class RoteFileService {
     }
 
     public void save(Path path, RoteCampaignSave save) throws IOException {
-        createBackupIfMissing(path);
+        createVisibleBackup(path);
         writeSafely(path, save);
     }
 
     public void saveAs(Path path, RoteCampaignSave save) throws IOException {
         if (Files.exists(path)) {
-            createBackupIfMissing(path);
+            createVisibleBackup(path);
         }
 
         writeSafely(path, save);
     }
 
     public void restoreBackup(Path path) throws IOException {
-        Path backupPath = getBackupPath(path);
+        Path backupPath = getVisibleBackupPath(path);
 
         if (!Files.exists(backupPath)) {
             throw new IOException("Backup file does not exist: " + backupPath);
         }
 
-        byte[] backupData = Files.readAllBytes(backupPath);
-        RoteCampaignSave restoredSave = new RoteCampaignSave(backupData);
-
-        if (Files.exists(path)) {
-            Path beforeRestorePath = path.resolveSibling(
-                    path.getFileName() + ".before-restore"
-            );
-
-            Files.copy(
-                    path,
-                    beforeRestorePath,
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.COPY_ATTRIBUTES
-            );
-        }
+        RoteCampaignSave restoredSave =
+                new RoteCampaignSave(Files.readAllBytes(backupPath));
 
         writeSafely(path, restoredSave);
     }
 
     public boolean backupExists(Path path) {
-        return Files.exists(getBackupPath(path));
+        return Files.exists(getVisibleBackupPath(path));
     }
 
-    private void createBackupIfMissing(Path path) throws IOException {
+    private void createVisibleBackup(Path path) throws IOException {
         if (!Files.exists(path)) {
             return;
         }
 
-        Path backupPath = getBackupPath(path);
+        Path backupPath = getVisibleBackupPath(path);
 
-        if (!Files.exists(backupPath)) {
-            Files.copy(
-                    path,
-                    backupPath,
-                    StandardCopyOption.COPY_ATTRIBUTES
-            );
-        }
+        Files.copy(
+                path,
+                backupPath,
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.COPY_ATTRIBUTES
+        );
     }
 
-    private Path getBackupPath(Path path) {
+    private Path getVisibleBackupPath(Path path) {
         return path.resolveSibling(path.getFileName() + ".bak");
     }
 
     private void writeSafely(Path path, RoteCampaignSave save) throws IOException {
-        Path absolutePath = path.toAbsolutePath();
+        Path tempFile = createTempRoteFile(path, save);
+
+        try {
+            moveReplacing(tempFile, path);
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
+    }
+
+    private Path createTempRoteFile(
+            Path targetPath,
+            RoteCampaignSave save
+    ) throws IOException {
+        Path absolutePath = targetPath.toAbsolutePath();
         Path parent = absolutePath.getParent();
 
         if (parent == null) {
@@ -92,26 +91,23 @@ public final class RoteFileService {
                 ".tmp"
         );
 
-        try {
-            Files.write(tempFile, save.toByteArray());
-            replaceFile(tempFile, absolutePath);
-        } finally {
-            Files.deleteIfExists(tempFile);
-        }
+        Files.write(tempFile, save.toByteArray());
+
+        return tempFile;
     }
 
-    private void replaceFile(Path tempFile, Path targetFile) throws IOException {
+    private void moveReplacing(Path source, Path target) throws IOException {
         try {
             Files.move(
-                    tempFile,
-                    targetFile,
+                    source,
+                    target,
                     StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE
             );
         } catch (AtomicMoveNotSupportedException exception) {
             Files.move(
-                    tempFile,
-                    targetFile,
+                    source,
+                    target,
                     StandardCopyOption.REPLACE_EXISTING
             );
         }
