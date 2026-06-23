@@ -1,0 +1,104 @@
+package dev.swbf2profile;
+
+import java.util.Arrays;
+
+public final class BattlefrontProfile {
+    private final byte[] data;
+
+    public BattlefrontProfile(byte[] data) {
+        if (data == null) {
+            throw new IllegalArgumentException("Profile data cannot be null.");
+        }
+
+        if (data.length != ProfileFormat.EXPECTED_FILE_SIZE) {
+            throw new IllegalArgumentException(
+                    "Invalid profile size: " + data.length
+                            + " bytes. Expected "
+                            + ProfileFormat.EXPECTED_FILE_SIZE
+                            + " bytes."
+            );
+        }
+
+        this.data = Arrays.copyOf(data, data.length);
+    }
+
+    public int getMedal(int index) {
+        checkIndex(index, ProfileFormat.MEDAL_COUNT, "medal");
+
+        int offset = ProfileFormat.MEDALS_OFFSET
+                + index * ProfileFormat.MEDAL_SIZE_BYTES;
+
+        return readUInt16LE(offset);
+    }
+
+    public void setMedal(int index, int value) {
+        checkIndex(index, ProfileFormat.MEDAL_COUNT, "medal");
+
+        if (value < 0 || value > 0xFFFF) {
+            throw new IllegalArgumentException("Medal value must be between 0 and 65535.");
+        }
+
+        int offset = ProfileFormat.MEDALS_OFFSET
+                + index * ProfileFormat.MEDAL_SIZE_BYTES;
+
+        writeUInt16LE(offset, value);
+    }
+
+    public long getStat(int index) {
+        checkIndex(index, ProfileFormat.STAT_COUNT, "stat");
+
+        int offset = ProfileFormat.STATS_OFFSET
+                + index * ProfileFormat.STAT_SIZE_BYTES;
+
+        return readUInt32LE(offset);
+    }
+
+    public void setStat(int index, long value) {
+        checkIndex(index, ProfileFormat.STAT_COUNT, "stat");
+
+        if (value < 0 || value > 0xFFFF_FFFFL) {
+            throw new IllegalArgumentException("Stat value must be between 0 and 4294967295.");
+        }
+
+        int offset = ProfileFormat.STATS_OFFSET
+                + index * ProfileFormat.STAT_SIZE_BYTES;
+
+        writeUInt32LE(offset, value);
+    }
+
+    public byte[] toByteArray() {
+        return Arrays.copyOf(data, data.length);
+    }
+
+    private int readUInt16LE(int offset) {
+        return (data[offset] & 0xFF)
+                | ((data[offset + 1] & 0xFF) << 8);
+    }
+
+    private long readUInt32LE(int offset) {
+        return ((long) data[offset] & 0xFF)
+                | (((long) data[offset + 1] & 0xFF) << 8)
+                | (((long) data[offset + 2] & 0xFF) << 16)
+                | (((long) data[offset + 3] & 0xFF) << 24);
+    }
+
+    private void writeUInt16LE(int offset, int value) {
+        data[offset] = (byte) (value & 0xFF);
+        data[offset + 1] = (byte) ((value >>> 8) & 0xFF);
+    }
+
+    private void writeUInt32LE(int offset, long value) {
+        data[offset] = (byte) (value & 0xFF);
+        data[offset + 1] = (byte) ((value >>> 8) & 0xFF);
+        data[offset + 2] = (byte) ((value >>> 16) & 0xFF);
+        data[offset + 3] = (byte) ((value >>> 24) & 0xFF);
+    }
+
+    private static void checkIndex(int index, int max, String label) {
+        if (index < 0 || index >= max) {
+            throw new IndexOutOfBoundsException(
+                    "Invalid " + label + " index: " + index
+            );
+        }
+    }
+}

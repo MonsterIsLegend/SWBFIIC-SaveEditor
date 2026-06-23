@@ -1,0 +1,12 @@
+target/
+dist/
+.idea/
+*.iml
+*.class
+*.log
+*.tmp
+*.bak
+*.before-restore
+*.profile
+.DS_Store
+Thumbs.db
