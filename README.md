@@ -1,145 +1,136 @@
 # SWBFIIC SaveEditor
 
-A desktop profile save editor for **Star Wars Battlefront II Classic**.
+A Windows save editor for **Star Wars Battlefront II Classic**.
 
-SWBFIIC SaveEditor edits Battlefront II Classic `.profile` files and creates backups before overwriting existing saves.
+SWBFIIC SaveEditor can edit `.profile`, `.rote`, and `.gc` save files from the game's `GameData/SaveGames` folder.
 
 ## Features
 
-* Edit career medal counts
-* Edit player points, kills, and deaths
-* Automatic `.bak` backup before saving
-* Restore from backup
-* Save As support
-* Steam, GOG, GOG Galaxy, and original CD-ROM save-folder detection
-* Portable Windows app with bundled Java runtime
-* Modern Java Swing UI using FlatLaf
+### Profile Editor `.profile`
 
-## Download
+Edit Battlefront II Classic profile data:
 
-Download the latest Windows portable release from the **Releases** page:
-
-```text
-SWBFIIC-SaveEditor-1.0.0-windows-portable.zip
-```
-
-Extract the zip, then run:
-
-```text
-SWBFIIC SaveEditor.exe
-```
-
-Java does not need to be installed separately for the portable release.
-
-## Requirements
-
-For the downloadable release:
-
-* Windows
-* Star Wars Battlefront II Classic
-
-For building from source:
-
-* Java 17 or newer
-* Maven
-
-## Supported fields
-
-### Career Medals
-
-* Gunslinger
-* Frenzy
-* Demolition
-* Technician
-* Marksman
-* Regulator
-* Endurance
-* Guardian
-* War Hero
-
-### Career Stats
-
-* Player Points
+* Profile name
+* Career medals
+* Player points
 * Kills
 * Deaths
 
-## Backups
+### Rise of the Empire Editor `.rote`
 
-Before overwriting an existing profile, the app creates a backup next to the original file.
+Edit Rise of the Empire campaign progress:
 
-Example:
+* Select the current campaign mission
+* Useful for skipping broken or stuck campaign states
 
-```text
-Player 1.profile
-Player 1.profile.bak
-```
+### Galactic Conquest Editor `.gc`
 
-When restoring a backup, the current profile is first copied to:
+Edit Galactic Conquest save data:
 
-```text
-Player 1.profile.before-restore
-```
+* Player and AI credits
+* Player and AI bonus slots
+* Controlled planets
+* Fleets
+* Unlocked units
 
-## Known save locations
+## Download
 
-The app attempts to detect common Battlefront II Classic save folders, including Steam, GOG, GOG Galaxy, and original CD-ROM installations.
+Download the latest Windows portable release from the **Releases** page.
 
-Examples:
+Use the file named like:
+
+`SWBFIIC-SaveEditor-1.3.0-windows-portable.zip`
+
+Extract the zip and run:
+
+`SWBFIIC SaveEditor.exe`
+
+Do not download the automatically generated source-code zip unless you want the source code.
+
+## Save File Location
+
+The editor attempts to detect common Battlefront II Classic save locations automatically.
+
+Common locations include:
 
 ```text
 C:\Program Files (x86)\Steam\steamapps\common\Star Wars Battlefront II\GameData\SaveGames
 C:\GOG Games\Star Wars Battlefront II\GameData\SaveGames
-C:\GOG Galaxy\Games\Star Wars Battlefront II\GameData\SaveGames
 C:\Program Files\LucasArts\Star Wars Battlefront II\GameData\SaveGames
 ```
 
-It also checks common install folders on `C:`, `D:`, `E:`, and `F:`.
+Custom installs are also checked on common drive roots such as `C:`, `D:`, `E:`, and `F:`.
 
-## Building from source
+## Supported File Types
 
-Build the runnable JAR:
+| File type  | Purpose                              |
+| ---------- | ------------------------------------ |
+| `.profile` | Player profile, medals, stats        |
+| `.rote`    | Rise of the Empire campaign progress |
+| `.gc`      | Galactic Conquest saves              |
+
+## Backups
+
+Before overwriting a save file, the editor creates or updates a `.bak` backup next to the original file.
+
+Example:
+
+```text
+YourStepSister.profile
+YourStepSister.profile.bak
+```
+
+If something goes wrong, use the restore backup button inside the editor.
+
+## Building from Source
+
+Requirements:
+
+* JDK 21
+* Maven
+
+Build the jar:
 
 ```powershell
 mvn clean package
 ```
 
-The shaded JAR is created at:
-
-```text
-target\SWBFIIC-SaveEditor-1.0.0.jar
-```
-
-Create the portable Windows app:
+Run the jar:
 
 ```powershell
-jpackage `
-  --type app-image `
-  --name "SWBFIIC SaveEditor" `
-  --app-version "1.0.0" `
-  --vendor "SWBFIIC SaveEditor" `
-  --input target `
-  --main-jar SWBFIIC-SaveEditor-1.0.0.jar `
-  --main-class dev.swbf2c.App `
+java -jar target\SWBFIIC-SaveEditor-1.3.0.jar
+```
+
+Create a Windows portable app image with `jpackage`:
+
+```powershell
+jpackage ^
+  --type app-image ^
+  --name "SWBFIIC SaveEditor" ^
+  --app-version "1.3.0" ^
+  --vendor "SWBFIIC SaveEditor" ^
+  --input target ^
+  --main-jar SWBFIIC-SaveEditor-1.3.0.jar ^
+  --main-class dev.swbf2c.App ^
   --dest dist
 ```
 
-Create the release zip:
+## Project Structure
 
-```powershell
-Compress-Archive `
-  -Path ".\dist\SWBFIIC SaveEditor" `
-  -DestinationPath ".\dist\SWBFIIC-SaveEditor-1.0.0-windows-portable.zip" `
-  -Force
+```text
+src/main/java/dev/swbf2c/
+├── common
+├── gc
+├── profile
+├── rote
+├── ui
+└── App.java
 ```
 
 ## Disclaimer
 
-This is an unofficial fan-made utility.
+This is an unofficial fan-made tool for Star Wars Battlefront II Classic.
 
-It is not affiliated with LucasArts, Disney, Steam, or GOG.
+It is not affiliated with or endorsed by LucasArts, Pandemic Studios, Disney, GOG, Steam, or any related rights holders.
 
-Always back up your save files before editing them.
-
-## License
-
-This project is licensed under the GNU General Public License v3.0 or later.
+Use at your own risk and keep backups of important save files.
