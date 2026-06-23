@@ -119,7 +119,7 @@ jpackage `
   --vendor "SWBFIIC SaveEditor" `
   --input target `
   --main-jar SWBFIIC-SaveEditor-1.0.0.jar `
-  --main-class dev.swbf2profile.App `
+  --main-class dev.swbf2c.App `
   --dest dist
 ```
 

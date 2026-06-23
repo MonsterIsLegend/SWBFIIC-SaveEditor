@@ -1,4 +1,4 @@
-package dev.swbf2profile;
+package dev.swbf2c.profile;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
