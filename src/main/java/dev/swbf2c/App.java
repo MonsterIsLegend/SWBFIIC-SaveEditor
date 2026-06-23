@@ -1,4 +1,6 @@
-package dev.swbf2profile;
+package dev.swbf2c;
+
+import dev.swbf2c.ui.MainWindow;
 
 import javax.swing.*;
 
