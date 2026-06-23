@@ -1,4 +1,4 @@
-package dev.swbf2c.rote;
+package dev.swbf2c.gc;
 
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -6,19 +6,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-public final class RoteFileService {
+public final class GcFileService {
 
-    public RoteCampaignSave load(Path path) throws IOException {
+    public GcConquestSave load(Path path) throws IOException {
         byte[] data = Files.readAllBytes(path);
-        return new RoteCampaignSave(data);
+        return new GcConquestSave(data);
     }
 
-    public void save(Path path, RoteCampaignSave save) throws IOException {
+    public void save(Path path, GcConquestSave save) throws IOException {
         createVisibleBackup(path);
         writeSafely(path, save);
     }
 
-    public void saveAs(Path path, RoteCampaignSave save) throws IOException {
+    public void saveAs(Path path, GcConquestSave save) throws IOException {
         if (Files.exists(path)) {
             createVisibleBackup(path);
         }
@@ -33,8 +33,8 @@ public final class RoteFileService {
             throw new IOException("Backup file does not exist: " + backupPath);
         }
 
-        RoteCampaignSave restoredSave =
-                new RoteCampaignSave(Files.readAllBytes(backupPath));
+        GcConquestSave restoredSave =
+                new GcConquestSave(Files.readAllBytes(backupPath));
 
         writeSafely(path, restoredSave);
     }
@@ -62,8 +62,8 @@ public final class RoteFileService {
         return path.resolveSibling(path.getFileName() + ".bak");
     }
 
-    private void writeSafely(Path path, RoteCampaignSave save) throws IOException {
-        Path tempFile = createTempRoteFile(path, save);
+    private void writeSafely(Path path, GcConquestSave save) throws IOException {
+        Path tempFile = createTempGcFile(path, save);
 
         try {
             moveReplacing(tempFile, path);
@@ -72,9 +72,9 @@ public final class RoteFileService {
         }
     }
 
-    private Path createTempRoteFile(
+    private Path createTempGcFile(
             Path targetPath,
-            RoteCampaignSave save
+            GcConquestSave save
     ) throws IOException {
         Path absolutePath = targetPath.toAbsolutePath();
         Path parent = absolutePath.getParent();

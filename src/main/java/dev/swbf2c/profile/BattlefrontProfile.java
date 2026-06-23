@@ -1,5 +1,6 @@
 package dev.swbf2c.profile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public final class BattlefrontProfile {
@@ -20,6 +21,59 @@ public final class BattlefrontProfile {
         }
 
         this.data = Arrays.copyOf(data, data.length);
+    }
+
+    public String getProfileName() {
+        int offset = ProfileFormat.PROFILE_NAME_OFFSET;
+        int maxBytes = ProfileFormat.PROFILE_NAME_SIZE_BYTES;
+        int end = offset;
+
+        while (end + 1 < offset + maxBytes) {
+            if (data[end] == 0 && data[end + 1] == 0) {
+                break;
+            }
+
+            end += 2;
+        }
+
+        return new String(
+                data,
+                offset,
+                end - offset,
+                StandardCharsets.UTF_16LE
+        );
+    }
+
+    public void setProfileName(String profileName) {
+        if (profileName == null) {
+            throw new IllegalArgumentException("Profile name cannot be null.");
+        }
+
+        String trimmedName = profileName.trim();
+
+        if (trimmedName.isEmpty()) {
+            throw new IllegalArgumentException("Profile name cannot be empty.");
+        }
+
+        if (trimmedName.length() > ProfileFormat.PROFILE_NAME_MAX_CHARS) {
+            throw new IllegalArgumentException(
+                    "Profile name must be "
+                            + ProfileFormat.PROFILE_NAME_MAX_CHARS
+                            + " characters or shorter."
+            );
+        }
+
+        if (trimmedName.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("Profile name cannot contain null characters.");
+        }
+
+        byte[] encoded = trimmedName.getBytes(StandardCharsets.UTF_16LE);
+
+        int offset = ProfileFormat.PROFILE_NAME_OFFSET;
+        int maxBytes = ProfileFormat.PROFILE_NAME_SIZE_BYTES;
+
+        Arrays.fill(data, offset, offset + maxBytes, (byte) 0);
+        System.arraycopy(encoded, 0, data, offset, encoded.length);
     }
 
     public int getMedal(int index) {
