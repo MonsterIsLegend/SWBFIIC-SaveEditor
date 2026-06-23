@@ -1,18 +1,16 @@
 package dev.swbf2c.ui;
 
+import dev.swbf2c.common.SaveFileType;
+import dev.swbf2c.gc.GcConquestSave;
+import dev.swbf2c.gc.GcFileService;
 import dev.swbf2c.profile.BattlefrontProfile;
 import dev.swbf2c.profile.ProfileFileService;
-import dev.swbf2c.profile.ProfileFormat;
 import dev.swbf2c.profile.ProfileLocations;
-import dev.swbf2c.rote.RoteCampaignMission;
 import dev.swbf2c.rote.RoteCampaignSave;
 import dev.swbf2c.rote.RoteFileService;
-import dev.swbf2c.rote.SaveFileType;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
@@ -20,404 +18,158 @@ import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Locale;
 
 public final class MainWindow extends JFrame {
-    private static final String WINDOW_TITLE = "SWBFIIC SaveEditor";
+    private static final String APP_TITLE = "SWBFIIC SaveEditor";
 
-    private static final String CARD_EMPTY = "empty";
-    private static final String CARD_PROFILE = "profile";
-    private static final String CARD_ROTE = "rote";
-
-    private static final String BOTTOM_EMPTY = "empty";
-    private static final String BOTTOM_PROFILE = "profile";
+    private static final String EDITOR_EMPTY = "empty";
+    private static final String EDITOR_PROFILE = "profile";
+    private static final String EDITOR_ROTE = "rote";
+    private static final String EDITOR_GC = "gc";
 
     private final ProfileFileService profileFileService = new ProfileFileService();
     private final RoteFileService roteFileService = new RoteFileService();
+    private final GcFileService gcFileService = new GcFileService();
 
-    private BattlefrontProfile currentProfile;
-    private RoteCampaignSave currentRoteSave;
+    private final CardLayout editorCardLayout = new CardLayout();
+    private final JPanel editorCards = new JPanel(editorCardLayout);
+
+    private CurrentFilePanel currentFilePanel;
+    private ProfileEditorPanel profileEditorPanel;
+    private RoteEditorPanel roteEditorPanel;
+    private GcEditorPanel gcEditorPanel;
+    private JLabel statusLabel;
 
     private Path currentPath;
     private SaveFileType currentFileType = SaveFileType.UNKNOWN;
 
+    private BattlefrontProfile currentProfile;
+    private RoteCampaignSave currentRoteSave;
+    private GcConquestSave currentGcSave;
+
     private boolean dirty;
-    private boolean suppressDirtyEvents;
-
-    private JTextField profileNameField;
-
-    private final JTextField[] medalFields =
-            new JTextField[ProfileFormat.MEDAL_COUNT];
-
-    private final JTextField[] statFields =
-            new JTextField[ProfileFormat.STAT_COUNT];
-
-    private JComboBox<RoteCampaignMission> missionComboBox;
-
-    private final JLabel currentFileLabel = new JLabel("No save file loaded");
-
-    private final JButton openButton = new JButton("Open Save File");
-
-    private final JButton saveButton = new JButton("Save");
-    private final JButton saveAsButton = new JButton("Save As");
-    private final JButton restoreButton = new JButton("Restore Backup");
-
-    private final JButton saveRoteButton = new JButton("Save Campaign");
-    private final JButton restoreRoteButton = new JButton("Restore Campaign Backup");
-
-    private CardLayout editorCardLayout;
-    private JPanel editorCardPanel;
-
-    private CardLayout bottomCardLayout;
-    private JPanel bottomCardPanel;
 
     public MainWindow() {
-        super(WINDOW_TITLE);
+        super(APP_TITLE);
 
-        setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-        setContentPane(createRootPanel());
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        setMinimumSize(new Dimension(1280, 820));
+        setPreferredSize(new Dimension(1400, 900));
 
-        configureActions();
+        buildUi();
+        installWindowCloseHandler();
 
-        setAllEditorFieldsEnabled(false);
-        updateButtonState();
-        updateTitle();
-        updateCurrentFileLabel();
-
-        showEditorCard(CARD_EMPTY);
-        showBottomCard(BOTTOM_EMPTY);
-
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent event) {
-                exitApplication();
-            }
-        });
-
-        setMinimumSize(new Dimension(820, 540));
         pack();
         setLocationRelativeTo(null);
+        updateWindowTitle();
     }
 
-    private JPanel createRootPanel() {
-        JPanel root = new JPanel(new BorderLayout(16, 16));
-        root.setBorder(new EmptyBorder(18, 22, 18, 22));
+    private void buildUi() {
+        JPanel rootPanel = new JPanel(new BorderLayout(12, 12));
+        rootPanel.setBorder(new EmptyBorder(14, 14, 14, 14));
 
-        root.add(createHeaderPanel(), BorderLayout.NORTH);
-        root.add(createEditorCardPanel(), BorderLayout.CENTER);
-        root.add(createBottomCardPanel(), BorderLayout.SOUTH);
+        currentFilePanel = new CurrentFilePanel(this::openSaveFile);
 
-        return root;
-    }
-
-    private JPanel createHeaderPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.add(createCurrentFilePanel(), BorderLayout.CENTER);
-        return panel;
-    }
-
-    private JPanel createCurrentFilePanel() {
-        JPanel panel = new JPanel(new BorderLayout(12, 0));
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder("Current File"),
-                new EmptyBorder(10, 12, 10, 12)
-        ));
-
-        currentFileLabel.setFont(currentFileLabel.getFont().deriveFont(Font.BOLD, 18.0f));
-
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        buttonPanel.add(openButton);
-
-        panel.add(currentFileLabel, BorderLayout.CENTER);
-        panel.add(buttonPanel, BorderLayout.EAST);
-
-        return panel;
-    }
-
-    private JPanel createEditorCardPanel() {
-        editorCardLayout = new CardLayout();
-        editorCardPanel = new JPanel(editorCardLayout);
-
-        editorCardPanel.add(createEmptyPanel(), CARD_EMPTY);
-        editorCardPanel.add(createProfileEditorPanel(), CARD_PROFILE);
-        editorCardPanel.add(createRoteEditorPanel(), CARD_ROTE);
-
-        return editorCardPanel;
-    }
-
-    private JPanel createEmptyPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder("Editor"),
-                new EmptyBorder(24, 24, 24, 24)
-        ));
-
-        JLabel label = new JLabel("Open a .profile or .rote save file to begin.");
-        label.setFont(label.getFont().deriveFont(15.0f));
-
-        panel.add(label, BorderLayout.CENTER);
-
-        return panel;
-    }
-
-    private JPanel createProfileEditorPanel() {
-        JPanel panel = new JPanel(new BorderLayout(12, 12));
-
-        panel.add(createProfileInfoPanel(), BorderLayout.NORTH);
-        panel.add(createProfileValuesPanel(), BorderLayout.CENTER);
-
-        return panel;
-    }
-
-    private JPanel createProfileInfoPanel() {
-        JPanel panel = createCardPanel("Profile");
-
-        profileNameField = new JTextField(22);
-        attachDirtyListener(profileNameField);
-
-        addFieldRow(panel, 0, "Profile Name", profileNameField);
-
-        JLabel note = new JLabel("Maximum profile name length: "
-                + ProfileFormat.PROFILE_NAME_MAX_CHARS
-                + " characters.");
-        note.setFont(note.getFont().deriveFont(12.0f));
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        gbc.gridwidth = 2;
-        gbc.insets = new Insets(4, 4, 4, 4);
-        gbc.anchor = GridBagConstraints.WEST;
-
-        panel.add(note, gbc);
-
-        return panel;
-    }
-
-    private JPanel createProfileValuesPanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(0, 0, 0, 12);
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.weightx = 1;
-        gbc.weighty = 1;
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-
-        panel.add(createMedalsPanel(), gbc);
-
-        gbc.insets = new Insets(0, 12, 0, 0);
-        gbc.gridx = 1;
-
-        panel.add(createStatsPanel(), gbc);
-
-        return panel;
-    }
-
-    private JPanel createMedalsPanel() {
-        JPanel panel = createCardPanel("Career Medals");
-
-        for (int i = 0; i < ProfileFormat.MEDAL_COUNT; i++) {
-            JTextField field = new JTextField(12);
-            field.setHorizontalAlignment(JTextField.RIGHT);
-            attachDirtyListener(field);
-
-            medalFields[i] = field;
-
-            addFieldRow(panel, i, ProfileFormat.MEDAL_NAMES[i], field);
-        }
-
-        addVerticalGlue(panel, ProfileFormat.MEDAL_COUNT);
-
-        return panel;
-    }
-
-    private JPanel createStatsPanel() {
-        JPanel panel = createCardPanel("Career Stats");
-
-        for (int i = 0; i < ProfileFormat.STAT_COUNT; i++) {
-            JTextField field = new JTextField(12);
-            field.setHorizontalAlignment(JTextField.RIGHT);
-            attachDirtyListener(field);
-
-            statFields[i] = field;
-
-            addFieldRow(panel, i, ProfileFormat.STAT_NAMES[i], field);
-        }
-
-        addVerticalGlue(panel, ProfileFormat.STAT_COUNT);
-
-        return panel;
-    }
-
-    private JPanel createRoteEditorPanel() {
-        JPanel panel = new JPanel(new BorderLayout(12, 12));
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder("Rise of the Empire Campaign"),
-                new EmptyBorder(14, 16, 14, 16)
-        ));
-
-        JPanel fieldsPanel = new JPanel(new GridBagLayout());
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridy = 0;
-        gbc.insets = new Insets(5, 4, 5, 4);
-        gbc.anchor = GridBagConstraints.WEST;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-
-        gbc.gridx = 0;
-        gbc.weightx = 0;
-
-        fieldsPanel.add(new JLabel("Current Mission"), gbc);
-
-        missionComboBox = new JComboBox<>();
-        missionComboBox.setModel(createMissionComboModel(null));
-        missionComboBox.addActionListener(event -> markDirtyFromRoteSelection());
-
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-
-        fieldsPanel.add(missionComboBox, gbc);
-
-        JLabel noteLabel = new JLabel(
-                "<html>"
-                        + "Rise of the Empire mission selector. "
-                        + "Choose the campaign mission that should be loaded from this .rote save file. "
-                        + "A .bak backup is created before saving changes."
-                        + "</html>"
+        profileEditorPanel = new ProfileEditorPanel(
+                this::markDirty,
+                this::saveCurrentFile,
+                this::saveProfileAs,
+                this::restoreCurrentFileBackup
         );
 
-        noteLabel.setFont(noteLabel.getFont().deriveFont(12.0f));
+        roteEditorPanel = new RoteEditorPanel(
+                this::markDirty,
+                this::saveCurrentFile,
+                this::restoreCurrentFileBackup
+        );
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        buttonPanel.add(restoreRoteButton);
-        buttonPanel.add(saveRoteButton);
+        gcEditorPanel = new GcEditorPanel(
+                this::markDirty,
+                this::saveCurrentFile,
+                this::restoreCurrentFileBackup
+        );
 
-        panel.add(fieldsPanel, BorderLayout.NORTH);
-        panel.add(noteLabel, BorderLayout.CENTER);
-        panel.add(buttonPanel, BorderLayout.SOUTH);
+        editorCards.add(createEmptyEditorPanel(), EDITOR_EMPTY);
+        editorCards.add(profileEditorPanel, EDITOR_PROFILE);
+        editorCards.add(roteEditorPanel, EDITOR_ROTE);
+        editorCards.add(gcEditorPanel, EDITOR_GC);
 
-        return panel;
+        statusLabel = new JLabel("Ready.");
+
+        JPanel currentFileWrapper = new JPanel(new BorderLayout());
+        currentFileWrapper.setBorder(new EmptyBorder(0, 16, 0, 16));
+        currentFileWrapper.add(currentFilePanel, BorderLayout.CENTER);
+
+        rootPanel.add(currentFileWrapper, BorderLayout.NORTH);
+        rootPanel.add(editorCards, BorderLayout.CENTER);
+        rootPanel.add(statusLabel, BorderLayout.SOUTH);
+
+        setContentPane(rootPanel);
+
+        currentFilePanel.clear();
+        editorCardLayout.show(editorCards, EDITOR_EMPTY);
     }
 
-    private DefaultComboBoxModel<RoteCampaignMission> createMissionComboModel(
-            RoteCampaignMission selectedMission
-    ) {
-        DefaultComboBoxModel<RoteCampaignMission> model =
-                new DefaultComboBoxModel<>();
+    private JPanel createEmptyEditorPanel() {
+        JPanel panel = new JPanel(new BorderLayout(16, 16));
+        panel.setBorder(new EmptyBorder(32, 32, 32, 32));
 
-        if (selectedMission != null && !selectedMission.known()) {
-            model.addElement(selectedMission);
-        }
+        JLabel titleLabel = new JLabel("Open a Battlefront II Classic save file to begin.");
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 20.0f));
+        titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-        for (RoteCampaignMission mission : RoteCampaignMission.knownMissions()) {
-            model.addElement(mission);
-        }
+        JPanel cardsPanel = new JPanel(new GridLayout(1, 3, 16, 16));
 
-        return model;
-    }
-
-    private JPanel createCardPanel(String title) {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder(title),
-                new EmptyBorder(12, 12, 12, 12)
+        cardsPanel.add(createStartCard(
+                "Profile",
+                ".profile",
+                "Edit profile name, medals, player points, kills, and deaths."
         ));
 
+        cardsPanel.add(createStartCard(
+                "Rise of the Empire",
+                ".rote",
+                "Select the current campaign mission. Useful for skipping broken campaign states."
+        ));
+
+        cardsPanel.add(createStartCard(
+                "Galactic Conquest",
+                ".gc",
+                "Edit credits, bonuses, controlled planets, fleets, and unlocked units."
+        ));
+
+        JPanel contentPanel = new JPanel(new BorderLayout(16, 16));
+        contentPanel.add(titleLabel, BorderLayout.NORTH);
+        contentPanel.add(cardsPanel, BorderLayout.CENTER);
+
+        panel.add(contentPanel, BorderLayout.NORTH);
+
         return panel;
     }
 
-    private void addFieldRow(
-            JPanel panel,
-            int row,
-            String labelText,
-            JTextField field
+    private JPanel createStartCard(
+            String title,
+            String extension,
+            String description
     ) {
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridy = row;
-        gbc.insets = new Insets(5, 4, 5, 4);
-        gbc.anchor = GridBagConstraints.WEST;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createTitledBorder(title));
+        panel.setPreferredSize(new Dimension(320, 105));
 
-        gbc.gridx = 0;
-        gbc.weightx = 0;
+        JLabel extensionLabel = new JLabel(extension, SwingConstants.CENTER);
+        extensionLabel.setFont(extensionLabel.getFont().deriveFont(Font.BOLD, 20.0f));
 
-        panel.add(new JLabel(labelText), gbc);
+        JLabel descriptionLabel = new JLabel(
+                "<html><div style='text-align:center;'>"
+                        + description
+                        + "</div></html>",
+                SwingConstants.CENTER
+        );
 
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-
-        panel.add(field, gbc);
-    }
-
-    private void addVerticalGlue(JPanel panel, int row) {
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.gridwidth = 2;
-        gbc.weighty = 1;
-        gbc.fill = GridBagConstraints.VERTICAL;
-
-        panel.add(Box.createVerticalGlue(), gbc);
-    }
-
-    private JPanel createBottomCardPanel() {
-        bottomCardLayout = new CardLayout();
-        bottomCardPanel = new JPanel(bottomCardLayout);
-
-        bottomCardPanel.add(createEmptyBottomPanel(), BOTTOM_EMPTY);
-        bottomCardPanel.add(createProfileBottomPanel(), BOTTOM_PROFILE);
-
-        return bottomCardPanel;
-    }
-
-    private JPanel createEmptyBottomPanel() {
-        return new JPanel(new BorderLayout());
-    }
-
-    private JPanel createProfileBottomPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        buttonPanel.add(restoreButton);
-        buttonPanel.add(saveAsButton);
-        buttonPanel.add(saveButton);
-
-        JLabel hintLabel = new JLabel("A .bak file is created before overwriting an existing profile.");
-        hintLabel.setFont(hintLabel.getFont().deriveFont(12.0f));
-
-        panel.add(hintLabel, BorderLayout.WEST);
-        panel.add(buttonPanel, BorderLayout.EAST);
+        panel.add(extensionLabel, BorderLayout.NORTH);
+        panel.add(descriptionLabel, BorderLayout.CENTER);
 
         return panel;
-    }
-
-    private void configureActions() {
-        styleButton(openButton);
-
-        styleButton(saveButton);
-        styleButton(saveAsButton);
-        styleButton(restoreButton);
-
-        styleButton(saveRoteButton);
-        styleButton(restoreRoteButton);
-
-        openButton.addActionListener(event -> openSaveFile());
-
-        saveButton.addActionListener(event -> saveCurrentFile());
-        saveAsButton.addActionListener(event -> saveCurrentFileAs());
-        restoreButton.addActionListener(event -> restoreBackup());
-
-        saveRoteButton.addActionListener(event -> saveCurrentFile());
-        restoreRoteButton.addActionListener(event -> restoreBackup());
-    }
-
-    private void styleButton(JButton button) {
-        button.setFocusable(false);
-        button.setFocusPainted(false);
-        button.setDefaultCapable(false);
-        button.putClientProperty("JButton.buttonType", "roundRect");
     }
 
     private void openSaveFile() {
@@ -425,201 +177,241 @@ public final class MainWindow extends JFrame {
             return;
         }
 
-        JFileChooser chooser = createSaveFileChooser();
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Open Battlefront II Save File");
+        fileChooser.setFileFilter(
+                new FileNameExtensionFilter(
+                        "Battlefront II save files (*.profile, *.rote, *.gc)",
+                        "profile",
+                        "rote",
+                        "gc"
+                )
+        );
 
-        int result = chooser.showOpenDialog(this);
+        fileChooser.setCurrentDirectory(findInitialSaveDirectory().toFile());
+
+        int result = fileChooser.showOpenDialog(this);
 
         if (result != JFileChooser.APPROVE_OPTION) {
             return;
         }
 
-        Path path = chooser.getSelectedFile().toPath();
-        SaveFileType detectedType = SaveFileType.detect(path);
+        Path selectedPath = fileChooser.getSelectedFile().toPath();
 
         try {
-            switch (detectedType) {
-                case PROFILE -> openProfile(path);
-                case ROTE -> openRote(path);
-                case UNKNOWN -> throw new IllegalArgumentException(
-                        "Unsupported file type. Open a .profile or .rote file."
-                );
-            }
-
-        } catch (IOException | IllegalArgumentException exception) {
-            showError("Could not load save file.", exception);
+            loadSaveFile(selectedPath);
+            setStatus("Loaded " + selectedPath.getFileName());
+        } catch (RuntimeException | IOException exception) {
+            showError("Could not open save file.", exception);
         }
     }
 
-    private void openProfile(Path path) throws IOException {
-        BattlefrontProfile profile = profileFileService.load(path);
+    private Path findInitialSaveDirectory() {
+        if (currentPath != null && currentPath.getParent() != null) {
+            return currentPath.getParent();
+        }
 
-        currentPath = path;
-        currentFileType = SaveFileType.PROFILE;
-        currentProfile = profile;
-        currentRoteSave = null;
-
-        displayProfile(profile);
-        setAllEditorFieldsEnabled(true);
-        setDirty(false);
-        updateCurrentFileLabel();
-
-        showEditorCard(CARD_PROFILE);
-        showBottomCard(BOTTOM_PROFILE);
+        return ProfileLocations.findDefaultSaveDirectory();
     }
 
-    private void openRote(Path path) throws IOException {
-        RoteCampaignSave roteSave = roteFileService.load(path);
+    private void loadSaveFile(Path path) throws IOException {
+        SaveFileType detectedType = SaveFileType.detect(path);
 
-        currentPath = path;
-        currentFileType = SaveFileType.ROTE;
-        currentProfile = null;
-        currentRoteSave = roteSave;
+        switch (detectedType) {
+            case PROFILE -> {
+                currentProfile = profileFileService.load(path);
+                currentRoteSave = null;
+                currentGcSave = null;
 
-        displayRote(roteSave);
-        setAllEditorFieldsEnabled(true);
+                currentPath = path;
+                currentFileType = SaveFileType.PROFILE;
+
+                profileEditorPanel.display(
+                        currentProfile,
+                        profileFileService.backupExists(currentPath)
+                );
+
+                editorCardLayout.show(editorCards, EDITOR_PROFILE);
+            }
+
+            case ROTE -> {
+                currentRoteSave = roteFileService.load(path);
+                currentProfile = null;
+                currentGcSave = null;
+
+                currentPath = path;
+                currentFileType = SaveFileType.ROTE;
+
+                roteEditorPanel.display(
+                        currentRoteSave,
+                        roteFileService.backupExists(currentPath)
+                );
+
+                editorCardLayout.show(editorCards, EDITOR_ROTE);
+            }
+
+            case GC -> {
+                currentGcSave = gcFileService.load(path);
+                currentProfile = null;
+                currentRoteSave = null;
+
+                currentPath = path;
+                currentFileType = SaveFileType.GC;
+
+                gcEditorPanel.display(
+                        currentGcSave,
+                        gcFileService.backupExists(currentPath)
+                );
+
+                editorCardLayout.show(editorCards, EDITOR_GC);
+            }
+
+            case UNKNOWN -> throw new IllegalArgumentException("Unsupported save file type.");
+        }
+
         setDirty(false);
-        updateCurrentFileLabel();
-
-        showEditorCard(CARD_ROTE);
-        showBottomCard(BOTTOM_EMPTY);
+        updateCurrentFilePanel();
     }
 
-    private boolean saveCurrentFile() {
+    private void saveCurrentFile() {
         if (currentPath == null || currentFileType == SaveFileType.UNKNOWN) {
-            showError("No save file is currently loaded.", null);
-            return false;
+            return;
         }
 
         try {
             switch (currentFileType) {
                 case PROFILE -> {
-                    updateProfileFromFields();
+                    profileEditorPanel.writeTo(currentProfile);
+
                     currentPath = profileFileService.saveWithPossibleRename(
                             currentPath,
                             currentProfile
                     );
+
+                    currentProfile = profileFileService.load(currentPath);
+
+                    profileEditorPanel.display(
+                            currentProfile,
+                            profileFileService.backupExists(currentPath)
+                    );
+
+                    editorCardLayout.show(editorCards, EDITOR_PROFILE);
                 }
+
                 case ROTE -> {
-                    updateRoteFromFields();
+                    roteEditorPanel.writeTo(currentRoteSave);
+
                     roteFileService.save(currentPath, currentRoteSave);
+
+                    currentRoteSave = roteFileService.load(currentPath);
+
+                    roteEditorPanel.display(
+                            currentRoteSave,
+                            roteFileService.backupExists(currentPath)
+                    );
+
+                    editorCardLayout.show(editorCards, EDITOR_ROTE);
                 }
-                case UNKNOWN -> throw new IllegalStateException("Unknown save file type.");
+
+                case GC -> {
+                    gcEditorPanel.writeTo(currentGcSave);
+
+                    gcFileService.save(currentPath, currentGcSave);
+
+                    currentGcSave = gcFileService.load(currentPath);
+
+                    gcEditorPanel.display(
+                            currentGcSave,
+                            gcFileService.backupExists(currentPath)
+                    );
+
+                    editorCardLayout.show(editorCards, EDITOR_GC);
+                }
+
+                case UNKNOWN -> throw new IllegalStateException("No supported save file is loaded.");
             }
 
             setDirty(false);
-            updateCurrentFileLabel();
+            updateCurrentFilePanel();
+            setStatus("Saved " + currentPath.getFileName());
 
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Save file saved successfully.",
-                    "Saved",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-
-            return true;
-
-        } catch (IOException | IllegalArgumentException exception) {
+        } catch (RuntimeException | IOException exception) {
             showError("Could not save file.", exception);
-            return false;
         }
     }
 
-    private boolean saveCurrentFileAs() {
-        if (currentFileType == SaveFileType.UNKNOWN) {
-            showError("No save file is currently loaded.", null);
-            return false;
-        }
-
-        JFileChooser chooser = createSaveFileChooser();
-
-        if (currentPath != null) {
-            chooser.setSelectedFile(currentPath.toFile());
-        }
-
-        int result = chooser.showSaveDialog(this);
-
-        if (result != JFileChooser.APPROVE_OPTION) {
-            return false;
-        }
-
-        File selectedFile = chooser.getSelectedFile();
-        Path selectedPath = ensureExpectedExtension(selectedFile, currentFileType).toPath();
-
-        if (selectedPath.toFile().exists()) {
-            int choice = JOptionPane.showConfirmDialog(
-                    this,
-                    "This file already exists. Overwrite it?",
-                    "Confirm Overwrite",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
-            );
-
-            if (choice != JOptionPane.YES_OPTION) {
-                return false;
-            }
+    private void saveProfileAs() {
+        if (currentProfile == null) {
+            return;
         }
 
         try {
-            switch (currentFileType) {
-                case PROFILE -> {
-                    updateProfileFromFields();
-                    profileFileService.saveAs(selectedPath, currentProfile);
-                }
-                case ROTE -> {
-                    updateRoteFromFields();
-                    roteFileService.saveAs(selectedPath, currentRoteSave);
-                }
-                case UNKNOWN -> throw new IllegalStateException("Unknown save file type.");
-            }
+            profileEditorPanel.writeTo(currentProfile);
+        } catch (RuntimeException exception) {
+            showError("Could not save profile.", exception);
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Profile As");
+        fileChooser.setFileFilter(
+                new FileNameExtensionFilter(
+                        "Battlefront II profile (*.profile)",
+                        "profile"
+                )
+        );
+
+        fileChooser.setCurrentDirectory(findInitialSaveDirectory().toFile());
+        fileChooser.setSelectedFile(new File(currentProfile.getProfileName() + ".profile"));
+
+        int result = fileChooser.showSaveDialog(this);
+
+        if (result != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        Path selectedPath = UiSupport.ensureExtension(
+                fileChooser.getSelectedFile().toPath(),
+                ".profile"
+        );
+
+        try {
+            profileFileService.saveAs(selectedPath, currentProfile);
 
             currentPath = selectedPath;
+            currentFileType = SaveFileType.PROFILE;
+            currentProfile = profileFileService.load(currentPath);
 
-            setDirty(false);
-            updateCurrentFileLabel();
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Save file saved successfully.",
-                    "Saved",
-                    JOptionPane.INFORMATION_MESSAGE
+            profileEditorPanel.display(
+                    currentProfile,
+                    profileFileService.backupExists(currentPath)
             );
 
-            return true;
+            editorCardLayout.show(editorCards, EDITOR_PROFILE);
 
-        } catch (IOException | IllegalArgumentException exception) {
-            showError("Could not save file.", exception);
-            return false;
+            setDirty(false);
+            updateCurrentFilePanel();
+            setStatus("Saved " + currentPath.getFileName());
+
+        } catch (RuntimeException | IOException exception) {
+            showError("Could not save profile as new file.", exception);
         }
     }
 
-    private void restoreBackup() {
+    private void restoreCurrentFileBackup() {
         if (currentPath == null || currentFileType == SaveFileType.UNKNOWN) {
-            showError("No save file is currently loaded.", null);
             return;
         }
 
-        boolean backupExists = switch (currentFileType) {
-            case PROFILE -> profileFileService.backupExists(currentPath);
-            case ROTE -> roteFileService.backupExists(currentPath);
-            case UNKNOWN -> false;
-        };
-
-        if (!backupExists) {
-            showError("No backup exists for this save file yet.", null);
-            return;
-        }
-
-        int choice = JOptionPane.showConfirmDialog(
+        int result = JOptionPane.showConfirmDialog(
                 this,
-                "Restore the .bak file for this save?\n\n"
-                        + "The current file will be replaced.\n"
-                        + "The current file will first be copied to a .before-restore file.",
+                "Restore from the .bak backup for this save file?",
                 "Restore Backup",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE
         );
 
-        if (choice != JOptionPane.YES_OPTION) {
+        if (result != JOptionPane.YES_OPTION) {
             return;
         }
 
@@ -627,302 +419,58 @@ public final class MainWindow extends JFrame {
             switch (currentFileType) {
                 case PROFILE -> {
                     profileFileService.restoreBackup(currentPath);
+
                     currentProfile = profileFileService.load(currentPath);
-                    displayProfile(currentProfile);
-                    showEditorCard(CARD_PROFILE);
-                    showBottomCard(BOTTOM_PROFILE);
+
+                    profileEditorPanel.display(
+                            currentProfile,
+                            profileFileService.backupExists(currentPath)
+                    );
+
+                    editorCardLayout.show(editorCards, EDITOR_PROFILE);
                 }
+
                 case ROTE -> {
                     roteFileService.restoreBackup(currentPath);
+
                     currentRoteSave = roteFileService.load(currentPath);
-                    displayRote(currentRoteSave);
-                    showEditorCard(CARD_ROTE);
-                    showBottomCard(BOTTOM_EMPTY);
+
+                    roteEditorPanel.display(
+                            currentRoteSave,
+                            roteFileService.backupExists(currentPath)
+                    );
+
+                    editorCardLayout.show(editorCards, EDITOR_ROTE);
                 }
-                case UNKNOWN -> throw new IllegalStateException("Unknown save file type.");
+
+                case GC -> {
+                    gcFileService.restoreBackup(currentPath);
+
+                    currentGcSave = gcFileService.load(currentPath);
+
+                    gcEditorPanel.display(
+                            currentGcSave,
+                            gcFileService.backupExists(currentPath)
+                    );
+
+                    editorCardLayout.show(editorCards, EDITOR_GC);
+                }
+
+                case UNKNOWN -> throw new IllegalStateException("No supported save file is loaded.");
             }
 
             setDirty(false);
-            updateCurrentFileLabel();
+            updateCurrentFilePanel();
+            setStatus("Restored backup for " + currentPath.getFileName());
 
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Backup restored successfully.",
-                    "Restored",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-
-        } catch (IOException | IllegalArgumentException exception) {
+        } catch (RuntimeException | IOException exception) {
             showError("Could not restore backup.", exception);
         }
     }
 
-    private void displayProfile(BattlefrontProfile profile) {
-        suppressDirtyEvents = true;
-
-        try {
-            profileNameField.setText(profile.getProfileName());
-
-            for (int i = 0; i < ProfileFormat.MEDAL_COUNT; i++) {
-                medalFields[i].setText(String.valueOf(profile.getMedal(i)));
-            }
-
-            for (int i = 0; i < ProfileFormat.STAT_COUNT; i++) {
-                statFields[i].setText(String.valueOf(profile.getStat(i)));
-            }
-        } finally {
-            suppressDirtyEvents = false;
-        }
-    }
-
-    private void displayRote(RoteCampaignSave roteSave) {
-        suppressDirtyEvents = true;
-
-        try {
-            int routeState = roteSave.getRouteState();
-            RoteCampaignMission selectedMission =
-                    RoteCampaignMission.fromRouteState(routeState);
-
-            missionComboBox.setModel(createMissionComboModel(selectedMission));
-            missionComboBox.setSelectedItem(selectedMission);
-
-        } finally {
-            suppressDirtyEvents = false;
-        }
-    }
-
-    private void updateProfileFromFields() {
-        if (currentProfile == null) {
-            throw new IllegalStateException("No profile file is loaded.");
-        }
-
-        currentProfile.setProfileName(profileNameField.getText());
-
-        for (int i = 0; i < ProfileFormat.MEDAL_COUNT; i++) {
-            int value = parseIntField(
-                    medalFields[i],
-                    ProfileFormat.MEDAL_NAMES[i],
-                    0,
-                    0xFFFF
-            );
-
-            currentProfile.setMedal(i, value);
-        }
-
-        for (int i = 0; i < ProfileFormat.STAT_COUNT; i++) {
-            long value = parseLongField(
-                    statFields[i],
-                    ProfileFormat.STAT_NAMES[i],
-                    0,
-                    0xFFFF_FFFFL
-            );
-
-            currentProfile.setStat(i, value);
-        }
-    }
-
-    private void updateRoteFromFields() {
-        if (currentRoteSave == null) {
-            throw new IllegalStateException("No ROTE campaign file is loaded.");
-        }
-
-        Object selectedItem = missionComboBox.getSelectedItem();
-
-        if (!(selectedItem instanceof RoteCampaignMission selectedMission)) {
-            throw new IllegalArgumentException("No campaign mission is selected.");
-        }
-
-        currentRoteSave.setRouteState(selectedMission.routeState());
-    }
-
-    private void markDirtyFromRoteSelection() {
-        if (!suppressDirtyEvents && currentFileType == SaveFileType.ROTE) {
-            setDirty(true);
-        }
-    }
-
-    private int parseIntField(
-            JTextField field,
-            String label,
-            int min,
-            int max
-    ) {
-        String text = field.getText().trim();
-
-        try {
-            int value = Integer.parseInt(text);
-
-            if (value < min || value > max) {
-                throw new IllegalArgumentException(
-                        label + " must be between " + min + " and " + max + "."
-                );
-            }
-
-            return value;
-
-        } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException(label + " must be a whole number.");
-        }
-    }
-
-    private long parseLongField(
-            JTextField field,
-            String label,
-            long min,
-            long max
-    ) {
-        String text = field.getText().trim();
-
-        try {
-            long value = Long.parseLong(text);
-
-            if (value < min || value > max) {
-                throw new IllegalArgumentException(
-                        label + " must be between " + min + " and " + max + "."
-                );
-            }
-
-            return value;
-
-        } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException(label + " must be a whole number.");
-        }
-    }
-
-    private JFileChooser createSaveFileChooser() {
-        JFileChooser chooser = new JFileChooser();
-
-        Path startDirectory;
-
-        if (currentPath != null && currentPath.getParent() != null) {
-            startDirectory = currentPath.getParent();
-        } else {
-            startDirectory = ProfileLocations.findDefaultSaveDirectory();
-        }
-
-        chooser.setCurrentDirectory(startDirectory.toFile());
-
-        FileNameExtensionFilter allSupportedFilter = new FileNameExtensionFilter(
-                "Battlefront II save files (*.profile, *.rote)",
-                "profile",
-                "rote"
-        );
-
-        chooser.addChoosableFileFilter(allSupportedFilter);
-        chooser.addChoosableFileFilter(new FileNameExtensionFilter(
-                "Profile files (*.profile)",
-                "profile"
-        ));
-        chooser.addChoosableFileFilter(new FileNameExtensionFilter(
-                "Rise of the Empire saves (*.rote)",
-                "rote"
-        ));
-
-        chooser.setFileFilter(allSupportedFilter);
-        chooser.setDialogTitle("Open Battlefront II Save File");
-
-        return chooser;
-    }
-
-    private File ensureExpectedExtension(File file, SaveFileType fileType) {
-        String name = file.getName();
-        String expectedExtension = fileType.extension();
-
-        if (expectedExtension.isBlank()) {
-            return file;
-        }
-
-        if (name.toLowerCase(Locale.ROOT).endsWith(expectedExtension)) {
-            return file;
-        }
-
-        return new File(file.getParentFile(), name + expectedExtension);
-    }
-
-    private void attachDirtyListener(JTextField field) {
-        field.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent event) {
-                markDirtyFromUserEdit();
-            }
-
-            @Override
-            public void removeUpdate(DocumentEvent event) {
-                markDirtyFromUserEdit();
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent event) {
-                markDirtyFromUserEdit();
-            }
-        });
-    }
-
-    private void markDirtyFromUserEdit() {
-        if (!suppressDirtyEvents && currentFileType == SaveFileType.PROFILE) {
-            setDirty(true);
-        }
-    }
-
-    private void setDirty(boolean dirty) {
-        this.dirty = dirty;
-        updateTitle();
-        updateButtonState();
-    }
-
-    private void updateTitle() {
-        String title = WINDOW_TITLE;
-
-        if (currentPath != null) {
-            title += " - " + stripExtension(currentPath.getFileName().toString());
-        }
-
-        if (dirty) {
-            title += " *";
-        }
-
-        setTitle(title);
-    }
-
-    private void updateButtonState() {
-        boolean profileLoaded = currentFileType == SaveFileType.PROFILE;
-        boolean roteLoaded = currentFileType == SaveFileType.ROTE;
-
-        saveButton.setEnabled(profileLoaded && dirty);
-        saveAsButton.setEnabled(profileLoaded);
-        restoreButton.setEnabled(profileLoaded && currentPath != null);
-
-        saveRoteButton.setEnabled(roteLoaded && dirty);
-        restoreRoteButton.setEnabled(roteLoaded && currentPath != null);
-    }
-
-    private void setAllEditorFieldsEnabled(boolean enabled) {
-        if (profileNameField != null) {
-            profileNameField.setEnabled(enabled);
-        }
-
-        for (JTextField field : medalFields) {
-            if (field != null) {
-                field.setEnabled(enabled);
-            }
-        }
-
-        for (JTextField field : statFields) {
-            if (field != null) {
-                field.setEnabled(enabled);
-            }
-        }
-
-        if (missionComboBox != null) {
-            missionComboBox.setEnabled(enabled);
-        }
-    }
-
-    private void updateCurrentFileLabel() {
-        if (currentPath == null || currentFileType == SaveFileType.UNKNOWN) {
-            currentFileLabel.setText("No save file loaded");
-            currentFileLabel.setToolTipText("No save file loaded");
-            updateTitle();
+    private void updateCurrentFilePanel() {
+        if (currentPath == null) {
+            currentFilePanel.clear();
             return;
         }
 
@@ -931,31 +479,32 @@ public final class MainWindow extends JFrame {
         if (currentFileType == SaveFileType.PROFILE && currentProfile != null) {
             displayName = currentProfile.getProfileName();
         } else {
-            displayName = stripExtension(currentPath.getFileName().toString());
+            displayName = UiSupport.stripExtension(currentPath.getFileName().toString());
         }
 
-        currentFileLabel.setText(currentFileType.displayName() + ": " + displayName);
-        currentFileLabel.setToolTipText(currentPath.toAbsolutePath().toString());
-
-        updateTitle();
+        currentFilePanel.display(currentPath, currentFileType, displayName);
     }
 
-    private String stripExtension(String fileName) {
-        int dotIndex = fileName.lastIndexOf('.');
-
-        if (dotIndex <= 0) {
-            return fileName;
+    private void markDirty() {
+        if (currentPath == null || currentFileType == SaveFileType.UNKNOWN) {
+            return;
         }
 
-        return fileName.substring(0, dotIndex);
+        setDirty(true);
     }
 
-    private void showEditorCard(String cardName) {
-        editorCardLayout.show(editorCardPanel, cardName);
+    private void setDirty(boolean dirty) {
+        this.dirty = dirty;
+
+        profileEditorPanel.setSaveEnabled(dirty && currentFileType == SaveFileType.PROFILE);
+        roteEditorPanel.setSaveEnabled(dirty && currentFileType == SaveFileType.ROTE);
+        gcEditorPanel.setSaveEnabled(dirty && currentFileType == SaveFileType.GC);
+
+        updateWindowTitle();
     }
 
-    private void showBottomCard(String cardName) {
-        bottomCardLayout.show(bottomCardPanel, cardName);
+    private void updateWindowTitle() {
+        setTitle(APP_TITLE + (dirty ? " *" : ""));
     }
 
     private boolean confirmDiscardUnsavedChanges() {
@@ -963,44 +512,42 @@ public final class MainWindow extends JFrame {
             return true;
         }
 
-        int choice = JOptionPane.showConfirmDialog(
+        int result = JOptionPane.showConfirmDialog(
                 this,
-                "You have unsaved changes. Save them before continuing?",
+                "You have unsaved changes. Discard them?",
                 "Unsaved Changes",
-                JOptionPane.YES_NO_CANCEL_OPTION,
+                JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE
         );
 
-        if (choice == JOptionPane.CANCEL_OPTION || choice == JOptionPane.CLOSED_OPTION) {
-            return false;
-        }
-
-        if (choice == JOptionPane.YES_OPTION) {
-            return saveCurrentFile();
-        }
-
-        return true;
+        return result == JOptionPane.YES_OPTION;
     }
 
-    private void exitApplication() {
-        if (!confirmDiscardUnsavedChanges()) {
-            return;
-        }
+    private void installWindowCloseHandler() {
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent event) {
+                if (confirmDiscardUnsavedChanges()) {
+                    dispose();
+                }
+            }
+        });
+    }
 
-        dispose();
-        System.exit(0);
+    private void setStatus(String message) {
+        statusLabel.setText(message);
     }
 
     private void showError(String message, Exception exception) {
-        String fullMessage = message;
+        String details = exception.getMessage();
 
-        if (exception != null && exception.getMessage() != null) {
-            fullMessage += "\n\n" + exception.getMessage();
+        if (details == null || details.isBlank()) {
+            details = exception.getClass().getSimpleName();
         }
 
         JOptionPane.showMessageDialog(
                 this,
-                fullMessage,
+                message + "\n\n" + details,
                 "Error",
                 JOptionPane.ERROR_MESSAGE
         );

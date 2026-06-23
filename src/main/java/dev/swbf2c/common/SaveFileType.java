@@ -1,4 +1,4 @@
-package dev.swbf2c.rote;
+package dev.swbf2c.common;
 
 import java.nio.file.Path;
 import java.util.Locale;
@@ -6,6 +6,7 @@ import java.util.Locale;
 public enum SaveFileType {
     PROFILE,
     ROTE,
+    GC,
     UNKNOWN;
 
     public static SaveFileType detect(Path path) {
@@ -19,6 +20,10 @@ public enum SaveFileType {
             return ROTE;
         }
 
+        if (fileName.endsWith(".gc")) {
+            return GC;
+        }
+
         return UNKNOWN;
     }
 
@@ -26,6 +31,7 @@ public enum SaveFileType {
         return switch (this) {
             case PROFILE -> ".profile";
             case ROTE -> ".rote";
+            case GC -> ".gc";
             case UNKNOWN -> "";
         };
     }
@@ -34,6 +40,7 @@ public enum SaveFileType {
         return switch (this) {
             case PROFILE -> "Profile";
             case ROTE -> "Rise of the Empire Campaign";
+            case GC -> "Galactic Conquest";
             case UNKNOWN -> "Unknown";
         };
     }
